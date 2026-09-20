@@ -1,0 +1,29 @@
+﻿# Secrets
+.env
+
+# Python
+__pycache__/
+*.pyc
+
+# .NET
+bin/
+obj/
+*.suo
+*.user
+
+# Node / frontend
+node_modules/
+dist/
+
+# Local databases
+*.db
+
+# Runtime/generated artifacts
+artifacts_storage/
+
+# Local AI/tool configuration
+.gemini/
+
+# Temporary/backup files
+*.bak
+*.tmp
