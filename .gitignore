@@ -1,0 +1,34 @@
+# Python
+__pycache__/
+*.pyc
+
+# Gemini / AI local workspace
+.gemini/
+.playwright-mcp/
+
+# .NET / Visual Studio
+bin/
+obj/
+**/bin/
+**/obj/
+.vs/
+**/.vs/
+*.suo
+*.user
+
+# Node
+node_modules/
+
+# Environment / secrets
+.env
+.env.*
+!.env.example
+
+# Local databases
+*.db
+
+# Temporary / backup files
+*.bak
+
+# Generated collection artifacts
+artifacts_storage/TransBingo_Collection_*.xlsx
