@@ -82,7 +82,8 @@ export interface ReconServiceContract {
   getException(id: string): Promise<ReconException | undefined>;
   getVendors(): Promise<Vendor[]>;
   getVendor(id: string): Promise<Vendor | undefined>;
-  updateVendor(vendor: Vendor): Promise<boolean>;
+  createVendor(vendor: Partial<Vendor>): Promise<Vendor>;
+  updateVendor(vendor: Vendor): Promise<Vendor>;
   getSchools(): Promise<School[]>;
   getArtifacts(): Promise<Artifact[]>;
   getAgentInvestigations(): Promise<AgentInvestigation[]>;
@@ -175,78 +176,48 @@ class ReconServiceImpl implements ReconServiceContract {
 
   private apiBase = typeof window !== 'undefined' && (window as any).__API_BASE__ ? (window as any).__API_BASE__ : 'http://localhost:5000/api';
 
+  private async requireSuccess(res: Response): Promise<any> {
+    if (res.ok) return res.json();
+    let body: any = {};
+    try { body = await res.json(); } catch { /* response had no JSON body */ }
+    throw new Error(body.message || `Vendor API request failed (${res.status}).`);
+  }
+
   async getVendors(): Promise<Vendor[]> {
-    try {
-      const res = await fetch(`${this.apiBase}/vendors`);
-      if (res.ok) {
-        const data = await res.json();
-        if (Array.isArray(data) && data.length > 0) {
-          this.vendors = data;
-          return data;
-        }
-      }
-    } catch (err) {
-      console.warn('Backend API unavailable, falling back to cached state:', err);
-    }
-    return this.vendors;
+    const res = await fetch(`${this.apiBase}/vendors`);
+    const data = await this.requireSuccess(res);
+    this.vendors = data;
+    return data;
   }
 
   async getVendor(id: string): Promise<Vendor | undefined> {
-    try {
-      const res = await fetch(`${this.apiBase}/vendors/${id}`);
-      if (res.ok) {
-        const data = await res.json();
-        return data;
-      }
-    } catch (err) {
-      console.warn('Backend API unavailable for getVendor, falling back:', err);
-    }
-    return this.vendors.find(v => v.id === id);
+    const res = await fetch(`${this.apiBase}/vendors/${encodeURIComponent(id)}`);
+    if (res.status === 404) return undefined;
+    return this.requireSuccess(res);
   }
 
-  async updateVendor(vendor: Vendor): Promise<boolean> {
-    try {
-      const res = await fetch(`${this.apiBase}/vendors/${vendor.id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(vendor)
-      });
-      if (res.ok) {
-        const updated = await res.json();
-        const idx = this.vendors.findIndex(v => v.id === vendor.id);
-        if (idx >= 0) this.vendors[idx] = updated;
+  async createVendor(vendor: Partial<Vendor>): Promise<Vendor> {
+    const res = await fetch(`${this.apiBase}/vendors`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(vendor)
+    });
+    const created = await this.requireSuccess(res);
+    this.vendors = [...this.vendors, created];
+    return created;
+  }
 
-        // Persist navigation steps if present
-        if (vendor.navigationSteps && vendor.navigationSteps.length > 0) {
-          await fetch(`${this.apiBase}/vendors/${vendor.id}/navigation-steps`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(vendor.navigationSteps)
-          });
-        }
-
-        this.addAudit(`Persisted configuration for ${vendor.name} to SQL Server`, 'OPERATOR', 'VendorConfig');
-        return true;
-      } else if (res.status === 409) {
-        const err = await res.json();
-        throw new Error(err.detail?.message || 'Concurrency conflict: Configuration was modified by another operator.');
-      } else if (res.status === 400) {
-        const err = await res.json();
-        throw new Error(err.detail?.message || 'Validation error: Invalid configuration parameters.');
-      }
-    } catch (err: any) {
-      if (err.message?.includes('Concurrency conflict') || err.message?.includes('Validation error')) {
-        throw err;
-      }
-      console.warn('API update failed, updating in-memory copy:', err);
-    }
+  async updateVendor(vendor: Vendor): Promise<Vendor> {
+    const res = await fetch(`${this.apiBase}/vendors/${encodeURIComponent(vendor.id)}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(vendor)
+    });
+    const updated = await this.requireSuccess(res);
     const idx = this.vendors.findIndex(v => v.id === vendor.id);
-    if (idx >= 0) {
-      this.vendors[idx] = vendor;
-      this.addAudit(`Updated configuration for ${vendor.name}`, 'OPERATOR', 'VendorConfig');
-      return true;
-    }
-    return false;
+    if (idx >= 0) this.vendors[idx] = updated;
+    this.addAudit(`Persisted basic information for ${vendor.name}`, 'OPERATOR', 'VendorConfig');
+    return updated;
   }
 
   async getSchools(): Promise<School[]> {

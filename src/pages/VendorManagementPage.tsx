@@ -13,7 +13,7 @@ import {
 import { PageHeader } from '../components/shared/PageHeader';
 import { StatusBadge } from '../components/shared/StatusBadge';
 import { reconService } from '../services/reconService';
-import { Vendor, HealthStatus } from '../types';
+import { Vendor, HealthStatus, ConnectorType } from '../types';
 
 interface VendorManagementPageProps {
   onConfigureVendor: (vendorId: string) => void;
@@ -27,13 +27,38 @@ export const VendorManagementPage: React.FC<VendorManagementPageProps> = ({
   const [vendors, setVendors] = useState<Vendor[]>([]);
   const [search, setSearch] = useState('');
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
-  const [newVendorName, setNewVendorName] = useState('');
+  const [newVendor, setNewVendor] = useState({ code: '', name: '', portalUrl: '', connectorType: ConnectorType.PORTAL_CRAWLER, isActive: true });
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
+  const [apiError, setApiError] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [testingVendorId, setTestingVendorId] = useState<string | null>(null);
   const [testLog, setTestLog] = useState<string | null>(null);
 
   useEffect(() => {
-    reconService.getVendors().then(setVendors);
+    reconService.getVendors()
+      .then(setVendors)
+      .catch(err => setApiError(err.message || 'Unable to load vendors.'))
+      .finally(() => setIsLoading(false));
   }, []);
+
+  const handleCreate = async () => {
+    setIsSaving(true);
+    setApiError(null);
+    try {
+      const created = await reconService.createVendor(newVendor);
+      const reloaded = await reconService.getVendor(created.id);
+      if (!reloaded) throw new Error('Vendor was created but could not be reloaded.');
+      setVendors(current => [...current.filter(v => v.id !== reloaded.id), reloaded]);
+      setSuccessMessage(`Vendor ${reloaded.code} was saved and reloaded from the backend.`);
+      setIsAddModalOpen(false);
+      setNewVendor({ code: '', name: '', portalUrl: '', connectorType: ConnectorType.PORTAL_CRAWLER, isActive: true });
+    } catch (err: any) {
+      setApiError(err.message || 'Unable to create vendor.');
+    } finally {
+      setIsSaving(false);
+    }
+  };
 
   const handleTest = async (vendorId: string) => {
     setTestingVendorId(vendorId);
@@ -76,6 +101,14 @@ export const VendorManagementPage: React.FC<VendorManagementPageProps> = ({
         </div>
       )}
 
+      {(apiError || successMessage) && (
+        <div className={`p-3 border text-xs font-semibold rounded-xl ${apiError ? 'bg-red-50 border-red-200 text-red-800' : 'bg-emerald-50 border-emerald-200 text-emerald-800'}`}>
+          {apiError || successMessage}
+        </div>
+      )}
+
+      {isLoading && <div className="p-8 text-center text-sm text-slate-500">Loading vendors…</div>}
+
       {/* Vendor Cards Grid matching Screen 9 */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
         {filtered.map(vendor => {
@@ -108,7 +141,7 @@ export const VendorManagementPage: React.FC<VendorManagementPageProps> = ({
                         : 'bg-emerald-50 text-emerald-700 border-emerald-200'
                     }`}
                   >
-                    {isWarning ? 'Warning' : 'Healthy'}
+                    {!vendor.isActive ? 'Inactive' : isWarning ? 'Warning' : 'Healthy'}
                   </span>
                 </div>
 
@@ -161,15 +194,51 @@ export const VendorManagementPage: React.FC<VendorManagementPageProps> = ({
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-xs p-4">
           <div className="bg-white max-w-md w-full rounded-2xl p-6 shadow-2xl border border-slate-200 space-y-4 animate-in zoom-in-95">
             <h3 className="text-sm font-bold text-[#14213D]">Add New Vendor Adapter</h3>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-semibold text-slate-600 mb-1">Vendor Code</label>
+                <input
+                  type="text"
+                  value={newVendor.code}
+                  onChange={e => setNewVendor({ ...newVendor, code: e.target.value })}
+                  className="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg text-xs"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-600 mb-1">Vendor Name</label>
+                <input
+                  type="text"
+                  value={newVendor.name}
+                  onChange={e => setNewVendor({ ...newVendor, name: e.target.value })}
+                  placeholder="e.g. GrameenClass Payments"
+                  className="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg text-xs"
+                />
+              </div>
+            </div>
             <div>
-              <label className="block text-xs font-semibold text-slate-600 mb-1">Vendor Name</label>
+              <label className="block text-xs font-semibold text-slate-600 mb-1">Portal URL</label>
               <input
-                type="text"
-                value={newVendorName}
-                onChange={e => setNewVendorName(e.target.value)}
-                placeholder="e.g. GrameenClass Payments"
+                type="url"
+                value={newVendor.portalUrl}
+                onChange={e => setNewVendor({ ...newVendor, portalUrl: e.target.value })}
+                placeholder="https://vendor.example.com"
                 className="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg text-xs"
               />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-semibold text-slate-600 mb-1">Connector Type</label>
+                <select value={newVendor.connectorType} onChange={e => setNewVendor({ ...newVendor, connectorType: e.target.value as ConnectorType })} className="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg text-xs">
+                  {Object.values(ConnectorType).map(type => <option key={type} value={type}>{type}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-600 mb-1">Status</label>
+                <select value={newVendor.isActive ? 'active' : 'inactive'} onChange={e => setNewVendor({ ...newVendor, isActive: e.target.value === 'active' })} className="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg text-xs">
+                  <option value="active">Active</option>
+                  <option value="inactive">Inactive</option>
+                </select>
+              </div>
             </div>
             <div className="flex justify-end gap-2 pt-2">
               <button
@@ -179,13 +248,11 @@ export const VendorManagementPage: React.FC<VendorManagementPageProps> = ({
                 Cancel
               </button>
               <button
-                onClick={() => {
-                  setIsAddModalOpen(false);
-                  setNewVendorName('');
-                }}
+                onClick={handleCreate}
+                disabled={isSaving}
                 className="px-4 py-1.5 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-lg"
               >
-                Save Adapter
+                {isSaving ? 'Saving…' : 'Save Adapter'}
               </button>
             </div>
           </div>

@@ -228,6 +228,7 @@ export interface Vendor {
   reportDefinition: VendorReportDefinition;
   navigationSteps: VendorNavigationStep[];
   schoolMappings: VendorSchoolMapping[];
+  isActive: boolean;
   rowVersion?: number;
 }
 

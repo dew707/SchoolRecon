@@ -74,16 +74,23 @@ export const VendorConfigPage: React.FC<VendorConfigPageProps> = ({
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error' | 'conflict'>('idle');
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [rowVersion, setRowVersion] = useState<number>(vendor.rowVersion || 1);
+  const [isLoading, setIsLoading] = useState(true);
 
   // Load latest configuration from SQL Server via API on mount
   useEffect(() => {
-    reconService.getVendor(vendorId).then(v => {
-      if (v) {
+    setIsLoading(true);
+    reconService.getVendor(vendorId)
+      .then(v => {
+        if (!v) throw new Error(`Vendor '${vendorId}' was not found.`);
         setVendor(v);
         setSteps(v.navigationSteps || []);
         if (v.rowVersion) setRowVersion(v.rowVersion);
-      }
-    });
+      })
+      .catch(err => {
+        setSaveState('error');
+        setStatusMessage(err.message || 'Unable to load vendor.');
+      })
+      .finally(() => setIsLoading(false));
   }, [vendorId]);
 
   const handleSaveConfiguration = async () => {
@@ -95,21 +102,15 @@ export const VendorConfigPage: React.FC<VendorConfigPageProps> = ({
         rowVersion: rowVersion,
         navigationSteps: steps
       };
-      const ok = await reconService.updateVendor(payload);
-      if (ok) {
-        const reloaded = await reconService.getVendor(vendorId);
-        if (reloaded) {
-          setVendor(reloaded);
-          setSteps(reloaded.navigationSteps || []);
-          if (reloaded.rowVersion) setRowVersion(reloaded.rowVersion);
-        }
-        setSaveState('saved');
-        setStatusMessage('Configuration successfully persisted to SQL Server database via Stored Procedures.');
-        setTimeout(() => setSaveState('idle'), 4000);
-      } else {
-        setSaveState('error');
-        setStatusMessage('Failed to persist configuration to API.');
-      }
+      await reconService.updateVendor(payload);
+      const reloaded = await reconService.getVendor(vendorId);
+      if (!reloaded) throw new Error('Vendor was saved but could not be reloaded.');
+      setVendor(reloaded);
+      setSteps(reloaded.navigationSteps || []);
+      if (reloaded.rowVersion) setRowVersion(reloaded.rowVersion);
+      setSaveState('saved');
+      setStatusMessage('Vendor basic information was saved and reloaded from the backend.');
+      setTimeout(() => setSaveState('idle'), 4000);
     } catch (err: any) {
       if (err.message?.includes('Concurrency conflict') || err.message?.includes('modified by another operator')) {
         setSaveState('conflict');
@@ -244,12 +245,12 @@ export const VendorConfigPage: React.FC<VendorConfigPageProps> = ({
           <span className="px-2.5 py-0.5 text-[11px] font-bold rounded-full bg-blue-50 text-blue-700 border border-blue-200">
             DEMO VENDOR CONNECTOR (v{rowVersion})
           </span>
-          <StatusBadge status="Active" />
+          <StatusBadge status={vendor.isActive ? 'Active' : 'Inactive'} />
 
           {/* SAVE CONFIGURATION BUTTON */}
           <button
             onClick={handleSaveConfiguration}
-            disabled={saveState === 'saving'}
+            disabled={saveState === 'saving' || isLoading}
             className={`px-4 py-1.5 text-xs font-bold rounded-xl transition-all shadow-sm flex items-center gap-1.5 ${
               saveState === 'saving'
                 ? 'bg-blue-400 text-white cursor-wait'
@@ -690,6 +691,11 @@ export const VendorConfigPage: React.FC<VendorConfigPageProps> = ({
       {/* TAB 2: GENERAL */}
       {activeTab === 'General' && (
         <div className="bg-white rounded-xl border border-slate-200 p-6 space-y-4 max-w-3xl text-xs">
+          {isLoading && <div className="text-slate-500">Loading vendor…</div>}
+          <div>
+            <label className="block font-bold text-slate-700 mb-1">Vendor Code</label>
+            <input type="text" readOnly value={vendor.code} className="w-full p-2 bg-slate-100 border border-slate-200 rounded-lg font-mono" />
+          </div>
           <div>
             <label className="block font-bold text-slate-700 mb-1">Vendor Name</label>
             <input
@@ -726,9 +732,13 @@ export const VendorConfigPage: React.FC<VendorConfigPageProps> = ({
 
             <div>
               <label className="block font-bold text-slate-700 mb-1">Status</label>
-              <select className="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg font-medium">
+              <select
+                value={vendor.isActive ? 'Active' : 'Inactive'}
+                onChange={e => setVendor({ ...vendor, isActive: e.target.value === 'Active' })}
+                className="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg font-medium"
+              >
                 <option value="Active">Active</option>
-                <option value="Disabled">Disabled</option>
+                <option value="Inactive">Inactive</option>
               </select>
             </div>
           </div>

@@ -11,6 +11,14 @@ namespace SchoolRecon.Application.Services;
 
 public class VendorService : IVendorService
 {
+    private static readonly HashSet<string> SupportedConnectorTypes = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "Browser Automation",
+        "API",
+        "Manual Upload",
+        "SFTP / File Transfer"
+    };
+
     private readonly IVendorRepository _vendorRepo;
     private readonly IConnectorRepository _connectorRepo;
     private readonly INavigationStepRepository _stepRepo;
@@ -125,11 +133,39 @@ public class VendorService : IVendorService
         return vendors.FirstOrDefault(v => v.Id == id);
     }
 
+    public async Task<VendorDto> CreateVendorAsync(VendorDto dto, string user)
+    {
+        await ValidateBasicInformationAsync(dto, null);
+
+        var vendor = new Vendor
+        {
+            VendorId = string.IsNullOrWhiteSpace(dto.Id) ? $"VEND-{Guid.NewGuid():N}" : dto.Id.Trim(),
+            VendorCode = dto.Code.Trim().ToUpperInvariant(),
+            VendorName = dto.Name.Trim(),
+            PortalUrl = NormalizePortalUrl(dto.PortalUrl),
+            ConnectorType = dto.ConnectorType.Trim(),
+            IsActive = dto.IsActive,
+            CreatedBy = user,
+            UpdatedBy = user
+        };
+
+        var created = await _vendorRepo.CreateAsync(vendor);
+        await _auditService.LogAsync("Vendor", created.VendorId, "CREATE", user, null,
+            new { created.VendorCode, created.VendorName, created.ConnectorType, created.IsActive });
+
+        return (await GetVendorByIdAsync(created.VendorId))!;
+    }
+
     public async Task<VendorDto> UpdateVendorAsync(string id, VendorDto dto, string user)
     {
+        if (string.IsNullOrWhiteSpace(id))
+            throw new DomainValidationException("Vendor ID is required.");
+
         var existing = await _vendorRepo.GetByIdAsync(id);
         if (existing == null)
             throw new EntityNotFoundException($"Vendor '{id}' not found.");
+
+        await ValidateBasicInformationAsync(dto, existing.VendorId);
 
         existing.VendorName = dto.Name;
         existing.PortalUrl = dto.PortalUrl;
@@ -152,6 +188,37 @@ public class VendorService : IVendorService
         var reloaded = await GetVendorByIdAsync(id);
         return reloaded!;
     }
+
+    private async Task ValidateBasicInformationAsync(VendorDto dto, string? currentVendorId)
+    {
+        var errors = new List<string>();
+        if (string.IsNullOrWhiteSpace(dto.Code)) errors.Add("Vendor Code is required.");
+        if (string.IsNullOrWhiteSpace(dto.Name)) errors.Add("Vendor Name is required.");
+        if (string.IsNullOrWhiteSpace(dto.ConnectorType) || !SupportedConnectorTypes.Contains(dto.ConnectorType.Trim()))
+            errors.Add("Connector Type must be one of: Browser Automation, API, Manual Upload, SFTP / File Transfer.");
+
+        if (!string.IsNullOrWhiteSpace(dto.PortalUrl) &&
+            (!Uri.TryCreate(dto.PortalUrl.Trim(), UriKind.Absolute, out var portalUri) ||
+             (portalUri.Scheme != Uri.UriSchemeHttp && portalUri.Scheme != Uri.UriSchemeHttps)))
+        {
+            errors.Add("Portal URL must be a valid absolute HTTP or HTTPS URL.");
+        }
+
+        if (!string.IsNullOrWhiteSpace(dto.Code))
+        {
+            var vendors = await _vendorRepo.GetAllAsync();
+            if (vendors.Any(v => !string.Equals(v.VendorId, currentVendorId, StringComparison.OrdinalIgnoreCase) &&
+                                 string.Equals(v.VendorCode, dto.Code.Trim(), StringComparison.OrdinalIgnoreCase)))
+            {
+                errors.Add($"Vendor Code '{dto.Code.Trim()}' already exists.");
+            }
+        }
+
+        if (errors.Count > 0) throw new DomainValidationException(errors);
+    }
+
+    private static string? NormalizePortalUrl(string? portalUrl) =>
+        string.IsNullOrWhiteSpace(portalUrl) ? null : portalUrl.Trim();
 
     public async Task<bool> TestConnectionAsync(string vendorId)
     {

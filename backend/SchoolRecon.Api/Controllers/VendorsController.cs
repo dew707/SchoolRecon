@@ -39,6 +39,13 @@ public class VendorsController : ControllerBase
         return Ok(vendor);
     }
 
+    [HttpPost]
+    public async Task<ActionResult<VendorDto>> Create([FromBody] VendorDto dto)
+    {
+        var created = await _vendorService.CreateVendorAsync(dto, User.Identity?.Name ?? "OPERATOR");
+        return CreatedAtAction(nameof(GetById), new { vendorId = created.Id }, created);
+    }
+
     [HttpPut("{vendorId}")]
     public async Task<ActionResult<VendorDto>> Update(string vendorId, [FromBody] VendorDto dto)
     {

@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using System.Data;
 using System.Threading.Tasks;
 using Dapper;
+using Microsoft.Data.SqlClient;
 using SchoolRecon.Application.Interfaces;
 using SchoolRecon.Domain.Entities;
 using SchoolRecon.Domain.Exceptions;
@@ -43,7 +44,14 @@ public class VendorRepository : IVendorRepository
         p.Add("@ConnectorType", vendor.ConnectorType);
         p.Add("@CreatedBy", vendor.CreatedBy);
 
-        return await conn.QuerySingleAsync<Vendor>("sp_Vendor_Create", p, commandType: CommandType.StoredProcedure);
+        try
+        {
+            return await conn.QuerySingleAsync<Vendor>("sp_Vendor_Create", p, commandType: CommandType.StoredProcedure);
+        }
+        catch (SqlException ex) when (ex.Number is 2601 or 2627)
+        {
+            throw new DomainValidationException($"Vendor Code '{vendor.VendorCode}' already exists.");
+        }
     }
 
     public async Task<Vendor> UpdateAsync(Vendor vendor, int expectedRowVersion)
