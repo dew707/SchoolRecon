@@ -32,7 +32,9 @@ import {
   ExceptionStatus,
   VendorCollectionJob,
   VendorArtifact,
-  VendorReportReadyEvent
+  VendorReportReadyEvent,
+  VendorCredentialReference,
+  VendorConnectorConfig
 } from '../types';
 
 import { realtimeHub } from './realtimeHub';
@@ -84,6 +86,10 @@ export interface ReconServiceContract {
   getVendor(id: string): Promise<Vendor | undefined>;
   createVendor(vendor: Partial<Vendor>): Promise<Vendor>;
   updateVendor(vendor: Vendor): Promise<Vendor>;
+  getVendorConnector(vendorId: string): Promise<VendorConnectorConfig | undefined>;
+  saveVendorConnector(vendorId: string, connector: VendorConnectorConfig): Promise<VendorConnectorConfig>;
+  getCredentialReference(vendorId: string, environment: string): Promise<VendorCredentialReference | undefined>;
+  saveCredentialReference(vendorId: string, credential: VendorCredentialReference): Promise<VendorCredentialReference>;
   getSchools(): Promise<School[]>;
   getArtifacts(): Promise<Artifact[]>;
   getAgentInvestigations(): Promise<AgentInvestigation[]>;
@@ -218,6 +224,33 @@ class ReconServiceImpl implements ReconServiceContract {
     if (idx >= 0) this.vendors[idx] = updated;
     this.addAudit(`Persisted basic information for ${vendor.name}`, 'OPERATOR', 'VendorConfig');
     return updated;
+  }
+
+  async getVendorConnector(vendorId: string): Promise<VendorConnectorConfig | undefined> {
+    const res = await fetch(`${this.apiBase}/vendors/${encodeURIComponent(vendorId)}/connector`);
+    if (res.status === 404) return undefined;
+    return this.requireSuccess(res);
+  }
+
+  async saveVendorConnector(vendorId: string, connector: VendorConnectorConfig): Promise<VendorConnectorConfig> {
+    const res = await fetch(`${this.apiBase}/vendors/${encodeURIComponent(vendorId)}/connector`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(connector)
+    });
+    return this.requireSuccess(res);
+  }
+
+  async getCredentialReference(vendorId: string, environment: string): Promise<VendorCredentialReference | undefined> {
+    const query = encodeURIComponent(environment);
+    const res = await fetch(`${this.apiBase}/vendors/${encodeURIComponent(vendorId)}/credential-reference?environment=${query}`);
+    if (res.status === 404) return undefined;
+    return this.requireSuccess(res);
+  }
+
+  async saveCredentialReference(vendorId: string, credential: VendorCredentialReference): Promise<VendorCredentialReference> {
+    const res = await fetch(`${this.apiBase}/vendors/${encodeURIComponent(vendorId)}/credential-reference`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(credential)
+    });
+    return this.requireSuccess(res);
   }
 
   async getSchools(): Promise<School[]> {

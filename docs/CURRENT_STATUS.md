@@ -21,6 +21,7 @@
 | **SQL Server 2022 Schema & Stored Procedures** | `IMPLEMENTED` (Code Complete) | 12 relational tables (`database/tables/*.sql`) and 23 stored procedures (`database/stored-procedures/*.sql`). Verified 1:1 parameter parity with Dapper repositories. |
 | **ASP.NET Core 8 & Dapper Data Access Layer** | `IMPLEMENTED` (Code Complete) | Clean Architecture solution (`backend/SchoolRecon.sln`) with 7 Dapper repositories calling real stored procedures. |
 | **Vendor Basic Information CRUD** | `LIVE_VERIFIED` | React/API/service/repository path supports list, get, create, update, active-state changes, validation, and RowVersion conflicts. Focused tests pass and the real HTTP/Dapper/stored-procedure/SQL Server path passed runtime acceptance. |
+| **Portal & Authentication Configuration** | `LIVE_VERIFIED` | Connector settings and credential-reference metadata persist by Vendor + Environment through React/API/service/Dapper/stored procedures/SQL Server. Validation, concurrency rejection, independent SQL verification, and API-restart persistence passed. Credential values are neither stored nor returned. |
 | **Live SQL Server Persistence Runtime** | `LIVE_VERIFIED` (Vendor Basic Information scope) | Docker SQL Server 2022 at `localhost:1433` persisted the temporary T02 acceptance vendor across API restart. Broader system runtime acceptance is not implied. |
 | **Live Dapper Stored Procedure Execution** | `LIVE_VERIFIED` (Vendor Basic Information scope) | ASP.NET/Dapper executed existing Vendor stored procedures for list, create, read, update, duplicate validation, concurrency, and status persistence. |
 | **Development SQLite Persistence (`school_recon.db`)** | `MOCKED` (Disqualified) | Disqualified from acceptance path per ADR-006. Preserved strictly for offline local developer prototyping. |
@@ -41,4 +42,6 @@
 ## 3. Environment Blockers & Remaining Limitations
 - **.NET SDK Available:** ASP.NET restore/build and focused vendor tests pass under .NET 8/9 tooling.
 - **Vendor Basic Information Runtime Accepted:** The configured Docker SQL Server and ASP.NET/Dapper path passed the P01-M2-T02 acceptance sequence.
-- **Milestone Scope:** This acceptance applies only to Vendor Basic Information. It does not accept credential configuration, collection execution, reconciliation, or M3 work.
+- **Portal/Authentication Configuration Runtime Accepted:** The real runtime passed connector and environment-specific credential-reference metadata save/reload, validation, concurrency, and API-restart persistence for P01-M2-T03.
+- **Portal Login Boundary:** T03 accepts configuration persistence and credential-reference security only. It does not claim a live third-party portal login or collection execution.
+- **Milestone Scope:** These acceptances apply only to P01-M2-T02 and P01-M2-T03. They do not accept collection execution, reconciliation, or M3 work.

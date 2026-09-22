@@ -38,7 +38,8 @@ import {
   VendorCollectionJob,
   JobStatus,
   StepAction,
-  SelectorStrategy
+  SelectorStrategy,
+  VendorConnectorConfig
 } from '../types';
 
 interface VendorConfigPageProps {
@@ -75,6 +76,12 @@ export const VendorConfigPage: React.FC<VendorConfigPageProps> = ({
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [rowVersion, setRowVersion] = useState<number>(vendor.rowVersion || 1);
   const [isLoading, setIsLoading] = useState(true);
+  const [environment, setEnvironment] = useState(vendor.credentialReference.environment || 'DEMO');
+  const [connector, setConnector] = useState<VendorConnectorConfig>({
+    vendorConnectorId: '', vendorId, connectorName: '', loginUrl: vendor.loginUrl,
+    connectorType: vendor.connectorType, defaultTimeoutSeconds: 30, maxRetryCount: 2,
+    isActive: true, rowVersion: vendor.rowVersion || 1
+  });
 
   // Load latest configuration from SQL Server via API on mount
   useEffect(() => {
@@ -93,10 +100,60 @@ export const VendorConfigPage: React.FC<VendorConfigPageProps> = ({
       .finally(() => setIsLoading(false));
   }, [vendorId]);
 
+  useEffect(() => {
+    Promise.all([
+      reconService.getVendorConnector(vendorId),
+      reconService.getCredentialReference(vendorId, environment)
+    ]).then(([loadedConnector, credential]) => {
+      if (loadedConnector) setConnector(loadedConnector);
+      if (credential) {
+        setVendor(current => ({ ...current, authType: credential.authenticationType, credentialReference: credential }));
+        setRowVersion(credential.rowVersion);
+      } else {
+        setVendor(current => ({
+          ...current,
+          authType: 'Username + Password',
+          credentialReference: {
+            secretId: '', vendorId, environment, authenticationType: 'Username + Password',
+            secretProvider: 'DevelopmentSecretProvider', vaultPath: '', credentialConfigured: false,
+            rowVersion: current.rowVersion || rowVersion
+          }
+        }));
+      }
+    }).catch(err => {
+      setSaveState('error');
+      setStatusMessage(err.message || 'Unable to load portal/authentication configuration.');
+    });
+  }, [vendorId, environment]);
+
   const handleSaveConfiguration = async () => {
     setSaveState('saving');
     setStatusMessage(null);
     try {
+      if (activeTab === 'Authentication') {
+        const savedConnector = await reconService.saveVendorConnector(vendorId, { ...connector, rowVersion });
+        const credentialPayload = {
+          ...vendor.credentialReference,
+          vendorId,
+          environment,
+          authenticationType: vendor.authType || 'Username + Password',
+          rowVersion: savedConnector.rowVersion
+        };
+        await reconService.saveCredentialReference(vendorId, credentialPayload);
+        const [reloadedConnector, reloadedCredential] = await Promise.all([
+          reconService.getVendorConnector(vendorId),
+          reconService.getCredentialReference(vendorId, environment)
+        ]);
+        if (!reloadedConnector || !reloadedCredential) throw new Error('Configuration was saved but could not be reloaded.');
+        setConnector(reloadedConnector);
+        setVendor(current => ({ ...current, loginUrl: reloadedConnector.loginUrl, authType: reloadedCredential.authenticationType, credentialReference: reloadedCredential }));
+        setRowVersion(reloadedCredential.rowVersion);
+        setSaveState('saved');
+        setStatusMessage('Portal and authentication metadata was saved and reloaded from SQL Server.');
+        setTimeout(() => setSaveState('idle'), 4000);
+        return;
+      }
+
       const payload: Vendor = {
         ...vendor,
         rowVersion: rowVersion,
@@ -758,39 +815,57 @@ export const VendorConfigPage: React.FC<VendorConfigPageProps> = ({
             </div>
           </div>
 
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block font-bold text-slate-700 mb-1">Connector Name</label>
+              <input
+                type="text"
+                value={connector.connectorName}
+                onChange={e => setConnector({ ...connector, connectorName: e.target.value })}
+                className="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg text-slate-800"
+              />
+            </div>
+            <label className="flex items-end gap-2 pb-2 font-semibold text-slate-700">
+              <input
+                type="checkbox"
+                checked={connector.isActive}
+                onChange={e => setConnector({ ...connector, isActive: e.target.checked })}
+              />
+              Connector is active
+            </label>
+          </div>
+
           <div>
             <label className="block font-bold text-slate-700 mb-1">Login URL</label>
             <input
               type="text"
-              value={vendor.loginUrl}
-              onChange={e => setVendor({ ...vendor, loginUrl: e.target.value })}
+              value={connector.loginUrl}
+              onChange={e => setConnector({ ...connector, loginUrl: e.target.value })}
               className="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg font-mono text-slate-800"
             />
           </div>
 
           <div className="grid grid-cols-2 gap-4">
             <div>
+              <label className="block font-bold text-slate-700 mb-1">Environment</label>
+              <select value={environment} onChange={e => setEnvironment(e.target.value)} className="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg font-medium">
+                <option value="DEMO">Development / Demo</option>
+                <option value="UAT">UAT</option>
+                <option value="PRODUCTION">Production</option>
+              </select>
+            </div>
+            <div>
               <label className="block font-bold text-slate-700 mb-1">Authentication Type</label>
               <select
                 value={vendor.authType}
-                onChange={e => setVendor({ ...vendor, authType: e.target.value as any })}
+                onChange={e => setVendor({ ...vendor, authType: e.target.value as any, credentialReference: { ...vendor.credentialReference, authenticationType: e.target.value as any } })}
                 className="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg font-medium"
               >
                 <option value="Username + Password">Username + Password</option>
                 <option value="Username + Password + OTP">Username + Password + OTP</option>
                 <option value="API Key">API Key</option>
-                <option value="Custom">Custom</option>
+                <option value="Bearer Token">Bearer Token</option>
               </select>
-            </div>
-
-            <div>
-              <label className="block font-bold text-slate-700 mb-1">Username / Credential Identifier</label>
-              <input
-                type="text"
-                readOnly
-                value={vendor.credentialReference.usernameIdentifier}
-                className="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg font-mono"
-              />
             </div>
           </div>
 
@@ -798,27 +873,41 @@ export const VendorConfigPage: React.FC<VendorConfigPageProps> = ({
             <div className="flex justify-between items-center">
               <span className="font-bold text-slate-700">Secret Provider Abstraction</span>
               <span className="font-mono text-[10px] text-emerald-700 font-bold bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
-                credentialConfigured: true
+                credentialConfigured: {String(vendor.credentialReference.credentialConfigured)}
               </span>
+            </div>
+
+            <div>
+              <label className="block text-slate-500 mb-1 font-semibold">Secret ID</label>
+              <input
+                type="text"
+                value={vendor.credentialReference.secretId}
+                onChange={e => setVendor({ ...vendor, credentialReference: { ...vendor.credentialReference, secretId: e.target.value } })}
+                className="w-full p-2 bg-white border border-slate-200 rounded-lg font-mono text-slate-700"
+              />
+            </div>
+
+            <div>
+              <label className="block text-slate-500 mb-1 font-semibold">Secret Provider</label>
+              <select value={vendor.credentialReference.secretProvider} onChange={e => setVendor({ ...vendor, credentialReference: { ...vendor.credentialReference, secretProvider: e.target.value as any } })} className="w-full p-2 bg-white border border-slate-200 rounded-lg font-mono text-slate-700">
+                <option value="DevelopmentSecretProvider">DevelopmentSecretProvider</option>
+              </select>
             </div>
 
             <div>
               <label className="block text-slate-500 mb-1 font-semibold">Credential Secret Reference (Vault Path)</label>
               <input
                 type="text"
-                readOnly
                 value={vendor.credentialReference.vaultPath}
+                onChange={e => setVendor({ ...vendor, credentialReference: { ...vendor.credentialReference, vaultPath: e.target.value } })}
                 className="w-full p-2 bg-white border border-slate-200 rounded-lg font-mono text-slate-700"
               />
             </div>
 
-            <div>
-              <label className="block text-slate-500 mb-1 font-semibold">Password Status</label>
-              <div className="p-2 bg-white border border-slate-200 rounded-lg text-slate-400 font-mono flex items-center justify-between">
-                <span>••••••••••••••••••••</span>
-                <span className="text-[10px] text-emerald-600 font-sans font-bold">Stored in Vault Provider</span>
-              </div>
-            </div>
+            <label className="flex items-center gap-2 font-semibold text-slate-700">
+              <input type="checkbox" checked={vendor.credentialReference.credentialConfigured} onChange={e => setVendor({ ...vendor, credentialReference: { ...vendor.credentialReference, credentialConfigured: e.target.checked } })} />
+              Reference metadata is active
+            </label>
           </div>
         </div>
       )}

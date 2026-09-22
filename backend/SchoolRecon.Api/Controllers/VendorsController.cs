@@ -68,6 +68,26 @@ public class VendorsController : ControllerBase
         return Ok(saved);
     }
 
+    [HttpGet("{vendorId}/credential-reference")]
+    public async Task<ActionResult<CredentialReferenceDto>> GetCredentialReference(
+        string vendorId,
+        [FromQuery] string environment)
+    {
+        var credential = await _configService.GetCredentialReferenceAsync(vendorId, environment);
+        if (credential == null)
+            return NotFound(new { error = "NOT_FOUND", message = $"Credential reference for vendor '{vendorId}' and environment '{environment}' not found." });
+        return Ok(credential);
+    }
+
+    [HttpPut("{vendorId}/credential-reference")]
+    public async Task<ActionResult<CredentialReferenceDto>> SaveCredentialReference(
+        string vendorId,
+        [FromBody] CredentialReferenceDto dto)
+    {
+        var saved = await _configService.SaveCredentialReferenceAsync(vendorId, dto, User.Identity?.Name ?? "OPERATOR");
+        return Ok(saved);
+    }
+
     [HttpGet("{vendorId}/navigation-steps")]
     public async Task<ActionResult<List<NavigationStepDto>>> GetNavigationSteps(string vendorId)
     {
@@ -112,9 +132,11 @@ public class VendorsController : ControllerBase
     }
 
     [HttpGet("{vendorId}/execution-config")]
-    public async Task<ActionResult<ExecutionConfigDto>> GetExecutionConfig(string vendorId)
+    public async Task<ActionResult<ExecutionConfigDto>> GetExecutionConfig(
+        string vendorId,
+        [FromQuery] string environment = "PRODUCTION")
     {
-        var config = await _configService.GetExecutionConfigAsync(vendorId);
+        var config = await _configService.GetExecutionConfigAsync(vendorId, environment);
         return Ok(config);
     }
 

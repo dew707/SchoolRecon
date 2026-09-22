@@ -88,11 +88,25 @@ export interface VendorNavigationStep {
 
 export interface VendorCredentialReference {
   secretId: string;
-  secretProvider: 'DevelopmentSecretProvider' | 'VaultSecretProvider' | 'AzureKeyVault' | 'AWSSecretsManager';
+  vendorId: string;
+  environment: string;
+  authenticationType: 'Username + Password' | 'Username + Password + OTP' | 'API Key' | 'Bearer Token';
+  secretProvider: 'DevelopmentSecretProvider';
   vaultPath: string;
-  usernameIdentifier: string;
   credentialConfigured: boolean;
-  lastRotated: string;
+  rowVersion: number;
+}
+
+export interface VendorConnectorConfig {
+  vendorConnectorId: string;
+  vendorId: string;
+  connectorName: string;
+  loginUrl: string;
+  connectorType: string;
+  defaultTimeoutSeconds: number;
+  maxRetryCount: number;
+  isActive: boolean;
+  rowVersion: number;
 }
 
 export interface VendorReportDefinition {
@@ -222,7 +236,7 @@ export interface Vendor {
   health: HealthStatus;
   portalUrl: string;
   loginUrl: string;
-  authType: 'Username + Password' | 'Username + Password + OTP' | 'API Key' | 'Custom';
+  authType: 'Username + Password' | 'Username + Password + OTP' | 'API Key' | 'Bearer Token' | '';
   credentialReference: VendorCredentialReference;
   lastVerified: string;
   reportDefinition: VendorReportDefinition;

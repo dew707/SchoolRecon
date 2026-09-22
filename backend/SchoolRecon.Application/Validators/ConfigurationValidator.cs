@@ -18,20 +18,52 @@ public static class ConfigurationValidator
         "data-testid", "id", "name", "css", "text", "role"
     };
 
+    private static readonly HashSet<string> AllowedAuthenticationTypes = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "Username + Password", "Username + Password + OTP", "API Key", "Bearer Token"
+    };
+
+    private static readonly HashSet<string> AllowedSecretProviders = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "DevelopmentSecretProvider"
+    };
+
     public static void ValidateConnector(VendorConnectorDto connector)
     {
         var errors = new List<string>();
 
         if (string.IsNullOrWhiteSpace(connector.LoginUrl))
             errors.Add("LoginUrl is required.");
-        else if (!Uri.TryCreate(connector.LoginUrl, UriKind.Absolute, out _) && !connector.LoginUrl.StartsWith("/"))
-            errors.Add("LoginUrl must be a valid URL or path.");
+        else if (!Uri.TryCreate(connector.LoginUrl, UriKind.Absolute, out var loginUri) ||
+                 (loginUri.Scheme != Uri.UriSchemeHttp && loginUri.Scheme != Uri.UriSchemeHttps))
+            errors.Add("LoginUrl must be a valid absolute HTTP or HTTPS URL.");
 
         if (connector.DefaultTimeoutSeconds <= 0)
             errors.Add("DefaultTimeoutSeconds must be greater than 0.");
 
         if (connector.MaxRetryCount < 0)
             errors.Add("MaxRetryCount cannot be negative.");
+
+        if (errors.Count > 0)
+            throw new DomainValidationException(errors);
+    }
+
+    public static void ValidateCredentialReference(CredentialReferenceDto credential)
+    {
+        var errors = new List<string>();
+
+        if (string.IsNullOrWhiteSpace(credential.Environment))
+            errors.Add("Environment is required.");
+        if (string.IsNullOrWhiteSpace(credential.AuthenticationType) ||
+            !AllowedAuthenticationTypes.Contains(credential.AuthenticationType))
+            errors.Add("AuthenticationType is unsupported.");
+        if (string.IsNullOrWhiteSpace(credential.SecretProvider) ||
+            !AllowedSecretProviders.Contains(credential.SecretProvider))
+            errors.Add("SecretProvider is unsupported.");
+        if (string.IsNullOrWhiteSpace(credential.SecretId))
+            errors.Add("SecretId is required.");
+        if (string.IsNullOrWhiteSpace(credential.VaultPath))
+            errors.Add("SecretReference is required.");
 
         if (errors.Count > 0)
             throw new DomainValidationException(errors);

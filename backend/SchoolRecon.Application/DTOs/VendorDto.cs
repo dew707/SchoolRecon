@@ -28,9 +28,11 @@ public class VendorDto
 public class CredentialReferenceDto
 {
     public string SecretId { get; set; } = string.Empty;
-    public string SecretProvider { get; set; } = "DevelopmentSecretProvider";
+    public string VendorId { get; set; } = string.Empty;
+    public string Environment { get; set; } = "DEMO";
+    public string AuthenticationType { get; set; } = "Username + Password";
+    public string SecretProvider { get; set; } = string.Empty;
     public string VaultPath { get; set; } = string.Empty;
-    public string UsernameIdentifier { get; set; } = "demo-operator";
-    public bool CredentialConfigured { get; set; } = true;
-    public string LastRotated { get; set; } = "18 Sep 2026 00:00:00 UTC";
+    public bool CredentialConfigured { get; set; }
+    public int RowVersion { get; set; } = 1;
 }

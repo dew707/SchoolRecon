@@ -23,6 +23,7 @@ GO
 
 -- 2. Stored Procedures
 :r ../stored-procedures/sp_Vendor_Procedures.sql
+:r ../stored-procedures/sp_VendorCredentialReference_Procedures.sql
 :r ../stored-procedures/sp_Connector_Procedures.sql
 :r ../stored-procedures/sp_NavigationStep_Procedures.sql
 :r ../stored-procedures/sp_ReportDefinition_Procedures.sql

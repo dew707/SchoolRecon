@@ -76,17 +76,66 @@ public class ConfigurationService : IConfigurationService
             IsActive = dto.IsActive
         };
 
-        var saved = await _connectorRepo.SaveAsync(entity);
-        v.RowVersion += 1;
         v.UpdatedBy = user;
-        await _vendorRepo.UpdateAsync(v, dto.RowVersion);
+        var updatedVendor = await _vendorRepo.UpdateAsync(v, dto.RowVersion);
+        var saved = await _connectorRepo.SaveAsync(entity);
 
         await _auditService.LogAsync("VendorConnector", entity.VendorConnectorId, "SAVE", user, existing, saved);
 
         dto.VendorConnectorId = saved.VendorConnectorId;
-        dto.RowVersion = v.RowVersion;
+        dto.RowVersion = updatedVendor.RowVersion;
         return dto;
     }
+
+    public async Task<CredentialReferenceDto?> GetCredentialReferenceAsync(string vendorId, string environment)
+    {
+        if (string.IsNullOrWhiteSpace(environment))
+            throw new DomainValidationException("Environment is required.");
+
+        var vendor = await _vendorRepo.GetByIdAsync(vendorId);
+        if (vendor == null) throw new EntityNotFoundException($"Vendor '{vendorId}' not found.");
+
+        var credential = await _vendorRepo.GetCredentialReferenceAsync(vendorId, environment.Trim().ToUpperInvariant());
+        return credential == null ? null : MapCredentialReference(credential);
+    }
+
+    public async Task<CredentialReferenceDto> SaveCredentialReferenceAsync(string vendorId, CredentialReferenceDto dto, string user)
+    {
+        dto.VendorId = vendorId;
+        ConfigurationValidator.ValidateCredentialReference(dto);
+        dto.Environment = dto.Environment.Trim().ToUpperInvariant();
+
+        var vendor = await _vendorRepo.GetByIdAsync(vendorId);
+        if (vendor == null) throw new EntityNotFoundException($"Vendor '{vendorId}' not found.");
+
+        var entity = new VendorCredentialReference
+        {
+            VendorCredentialReferenceId = dto.SecretId.Trim(),
+            VendorId = vendorId,
+            Environment = dto.Environment,
+            SecretProvider = dto.SecretProvider.Trim(),
+            SecretReference = dto.VaultPath.Trim(),
+            AuthenticationType = dto.AuthenticationType.Trim(),
+            IsConfigured = dto.CredentialConfigured
+        };
+
+        var saved = await _vendorRepo.SaveCredentialReferenceAsync(entity, dto.RowVersion, user);
+        await _auditService.LogAsync("VendorCredentialReference", saved.VendorCredentialReferenceId, "SAVE", user,
+            null, new { saved.VendorId, saved.Environment, saved.SecretProvider, saved.AuthenticationType, saved.IsConfigured });
+        return MapCredentialReference(saved);
+    }
+
+    private static CredentialReferenceDto MapCredentialReference(VendorCredentialReference credential) => new()
+    {
+        SecretId = credential.VendorCredentialReferenceId,
+        VendorId = credential.VendorId,
+        Environment = credential.Environment,
+        AuthenticationType = credential.AuthenticationType,
+        SecretProvider = credential.SecretProvider,
+        VaultPath = credential.SecretReference,
+        CredentialConfigured = credential.IsConfigured,
+        RowVersion = credential.RowVersion
+    };
 
     public async Task<List<NavigationStepDto>> GetNavigationStepsAsync(string vendorId)
     {
@@ -262,12 +311,14 @@ public class ConfigurationService : IConfigurationService
         return await GetSchoolMappingsAsync(vendorId);
     }
 
-    public async Task<ExecutionConfigDto> GetExecutionConfigAsync(string vendorId)
+    public async Task<ExecutionConfigDto> GetExecutionConfigAsync(string vendorId, string environment)
     {
         var vendor = await _vendorRepo.GetByIdAsync(vendorId);
         if (vendor == null) throw new EntityNotFoundException($"Vendor '{vendorId}' not found.");
 
-        var cred = await _vendorRepo.GetCredentialReferenceAsync(vendorId);
+        var cred = await _vendorRepo.GetCredentialReferenceAsync(vendorId, environment.Trim().ToUpperInvariant());
+        if (cred == null)
+            throw new DomainValidationException($"Credential reference for environment '{environment}' is not configured.");
         var connector = await _connectorRepo.GetByVendorAsync(vendorId);
         var steps = connector != null ? await GetNavigationStepsAsync(vendorId) : new List<NavigationStepDto>();
         var repDef = await GetReportDefinitionAsync(vendorId);
@@ -284,10 +335,10 @@ public class ConfigurationService : IConfigurationService
             },
             Credential = new ExecutionCredentialDto
             {
-                AuthenticationType = cred?.AuthenticationType ?? "Username + Password",
-                SecretProvider = cred?.SecretProvider ?? "DevelopmentSecretProvider",
-                SecretReference = cred?.SecretReference ?? "vault://transbingo/demo/operator",
-                UsernameIdentifier = "demo-operator"
+                AuthenticationType = cred.AuthenticationType,
+                SecretProvider = cred.SecretProvider,
+                SecretReference = cred.SecretReference,
+                UsernameIdentifier = string.Empty
             },
             Connector = new ExecutionConnectorDto
             {

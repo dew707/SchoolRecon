@@ -54,11 +54,13 @@ export const mockVendors: Vendor[] = [
     authType: 'Username + Password',
     credentialReference: {
       secretId: 'sec-transbingo-01',
+      vendorId: 'VEND-01',
+      environment: 'DEMO',
+      authenticationType: 'Username + Password',
       secretProvider: 'DevelopmentSecretProvider',
       vaultPath: 'vault://transbingo/demo/operator',
-      usernameIdentifier: 'demo-operator',
       credentialConfigured: true,
-      lastRotated: '18 Sep 2026 00:00:00 UTC'
+      rowVersion: 1
     },
     lastVerified: '18 Sep 2026 00:45',
     reportDefinition: {
@@ -93,11 +95,13 @@ export const mockVendors: Vendor[] = [
     authType: 'API Key',
     credentialReference: {
       secretId: 'sec-edupay-02',
+      vendorId: 'VEND-02',
+      environment: 'PRODUCTION',
+      authenticationType: 'API Key',
       secretProvider: 'DevelopmentSecretProvider',
       vaultPath: 'vault://edupay/prod/api_key_v2',
-      usernameIdentifier: 'api_client_tap_recon',
       credentialConfigured: true,
-      lastRotated: '18 Sep 2026 00:50:00 UTC'
+      rowVersion: 1
     },
     lastVerified: '18 Sep 2026 00:50',
     reportDefinition: {
@@ -128,11 +132,13 @@ export const mockVendors: Vendor[] = [
     authType: 'Username + Password',
     credentialReference: {
       secretId: 'sec-schoolsoft-03',
+      vendorId: 'VEND-03',
+      environment: 'PRODUCTION',
+      authenticationType: 'Username + Password',
       secretProvider: 'DevelopmentSecretProvider',
       vaultPath: 'vault://schoolsoft/prod/bot_token',
-      usernameIdentifier: 'ops_crawler_bot_03',
       credentialConfigured: true,
-      lastRotated: '17 Sep 2026 23:30:00 UTC'
+      rowVersion: 1
     },
     lastVerified: '17 Sep 2026 23:30',
     reportDefinition: {

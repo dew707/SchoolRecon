@@ -193,10 +193,21 @@ public class VendorBasicInformationTests
 internal sealed class MemoryVendorRepository : IVendorRepository
 {
     private readonly Dictionary<string, Vendor> _items;
+    private readonly Dictionary<string, VendorCredentialReference> _credentials = new();
     public MemoryVendorRepository(IEnumerable<Vendor> vendors) => _items = vendors.ToDictionary(v => v.VendorId, Clone);
     public Task<IEnumerable<Vendor>> GetAllAsync() => Task.FromResult<IEnumerable<Vendor>>(_items.Values.Select(Clone).ToList());
     public Task<Vendor?> GetByIdAsync(string id) => Task.FromResult(_items.TryGetValue(id, out var value) ? Clone(value) : null);
-    public Task<VendorCredentialReference?> GetCredentialReferenceAsync(string id) => Task.FromResult<VendorCredentialReference?>(null);
+    public Task<VendorCredentialReference?> GetCredentialReferenceAsync(string id, string environment) =>
+        Task.FromResult(_credentials.TryGetValue($"{id}|{environment}", out var value) ? CloneCredential(value) : null);
+    public Task<VendorCredentialReference> SaveCredentialReferenceAsync(VendorCredentialReference credential, int expectedRowVersion, string updatedBy)
+    {
+        var vendor = _items[credential.VendorId];
+        if (vendor.RowVersion != expectedRowVersion) throw new ConcurrencyConflictException("Concurrency conflict");
+        vendor.RowVersion++;
+        credential.RowVersion = vendor.RowVersion;
+        _credentials[$"{credential.VendorId}|{credential.Environment}"] = CloneCredential(credential);
+        return Task.FromResult(CloneCredential(credential));
+    }
     public Task<Vendor> CreateAsync(Vendor vendor) { _items.Add(vendor.VendorId, Clone(vendor)); return Task.FromResult(Clone(vendor)); }
     public Task<Vendor> UpdateAsync(Vendor vendor, int expectedRowVersion)
     {
@@ -206,6 +217,7 @@ internal sealed class MemoryVendorRepository : IVendorRepository
         return Task.FromResult(Clone(saved));
     }
     private static Vendor Clone(Vendor v) => new() { VendorId=v.VendorId, VendorCode=v.VendorCode, VendorName=v.VendorName, PortalUrl=v.PortalUrl, ConnectorType=v.ConnectorType, IsActive=v.IsActive, CreatedAt=v.CreatedAt, CreatedBy=v.CreatedBy, UpdatedAt=v.UpdatedAt, UpdatedBy=v.UpdatedBy, RowVersion=v.RowVersion };
+    private static VendorCredentialReference CloneCredential(VendorCredentialReference c) => new() { VendorCredentialReferenceId=c.VendorCredentialReferenceId, VendorId=c.VendorId, Environment=c.Environment, SecretProvider=c.SecretProvider, SecretReference=c.SecretReference, AuthenticationType=c.AuthenticationType, IsConfigured=c.IsConfigured, RowVersion=c.RowVersion };
 }
 
 internal sealed class EmptyConnectorRepository : IConnectorRepository { public Task<VendorConnector?> GetByVendorAsync(string id) => Task.FromResult<VendorConnector?>(null); public Task<VendorConnector> SaveAsync(VendorConnector v) => Task.FromResult(v); }

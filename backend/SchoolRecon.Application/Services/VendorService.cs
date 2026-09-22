@@ -50,7 +50,6 @@ public class VendorService : IVendorService
         foreach (var v in vendors)
         {
             var connector = await _connectorRepo.GetByVendorAsync(v.VendorId);
-            var cred = await _vendorRepo.GetCredentialReferenceAsync(v.VendorId);
             var repDef = await _reportRepo.GetByVendorAsync(v.VendorId);
 
             var dto = new VendorDto
@@ -61,17 +60,15 @@ public class VendorService : IVendorService
                 PortalUrl = v.PortalUrl,
                 LoginUrl = connector?.LoginUrl ?? "",
                 ConnectorType = v.ConnectorType,
-                AuthType = cred?.AuthenticationType ?? "Username + Password",
+                AuthType = string.Empty,
                 SchoolsCount = 0,
                 IsActive = v.IsActive,
                 RowVersion = v.RowVersion,
                 CredentialReference = new CredentialReferenceDto
                 {
-                    SecretId = cred?.VendorCredentialReferenceId ?? "",
-                    SecretProvider = cred?.SecretProvider ?? "DevelopmentSecretProvider",
-                    VaultPath = cred?.SecretReference ?? "",
-                    UsernameIdentifier = "demo-operator",
-                    CredentialConfigured = cred?.IsConfigured ?? true
+                    VendorId = v.VendorId,
+                    CredentialConfigured = false,
+                    RowVersion = v.RowVersion
                 }
             };
 

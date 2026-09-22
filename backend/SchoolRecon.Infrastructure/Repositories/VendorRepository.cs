@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.Data;
+using System.Linq;
 using System.Threading.Tasks;
 using Dapper;
 using Microsoft.Data.SqlClient;
@@ -22,7 +23,8 @@ public class VendorRepository : IVendorRepository
     public async Task<IEnumerable<Vendor>> GetAllAsync()
     {
         using var conn = _factory.CreateConnection();
-        return await conn.QueryAsync<Vendor>("sp_Vendor_GetAll", commandType: CommandType.StoredProcedure);
+        var rows = await conn.QueryAsync<Vendor>("sp_Vendor_GetAll", commandType: CommandType.StoredProcedure);
+        return rows.GroupBy(v => v.VendorId).Select(group => group.First());
     }
 
     public async Task<Vendor?> GetByIdAsync(string vendorId)
@@ -30,7 +32,7 @@ public class VendorRepository : IVendorRepository
         using var conn = _factory.CreateConnection();
         var p = new DynamicParameters();
         p.Add("@VendorId", vendorId);
-        return await conn.QuerySingleOrDefaultAsync<Vendor>("sp_Vendor_GetById", p, commandType: CommandType.StoredProcedure);
+        return (await conn.QueryAsync<Vendor>("sp_Vendor_GetById", p, commandType: CommandType.StoredProcedure)).FirstOrDefault();
     }
 
     public async Task<Vendor> CreateAsync(Vendor vendor)
@@ -76,10 +78,49 @@ public class VendorRepository : IVendorRepository
         }
     }
 
-    public async Task<VendorCredentialReference?> GetCredentialReferenceAsync(string vendorId)
+    public async Task<VendorCredentialReference?> GetCredentialReferenceAsync(string vendorId, string environment)
     {
         using var conn = _factory.CreateConnection();
+        var p = new DynamicParameters();
+        p.Add("@VendorId", vendorId);
+        p.Add("@Environment", environment);
         return await conn.QuerySingleOrDefaultAsync<VendorCredentialReference>(
-            "SELECT * FROM VendorCredentialReference WHERE VendorId = @VendorId", new { VendorId = vendorId });
+            "sp_VendorCredentialReference_GetByVendor", p, commandType: CommandType.StoredProcedure);
+    }
+
+    public async Task<VendorCredentialReference> SaveCredentialReferenceAsync(
+        VendorCredentialReference credentialReference,
+        int expectedRowVersion,
+        string updatedBy)
+    {
+        using var conn = _factory.CreateConnection();
+        var p = new DynamicParameters();
+        p.Add("@VendorCredentialReferenceId", credentialReference.VendorCredentialReferenceId);
+        p.Add("@VendorId", credentialReference.VendorId);
+        p.Add("@Environment", credentialReference.Environment);
+        p.Add("@SecretProvider", credentialReference.SecretProvider);
+        p.Add("@SecretReference", credentialReference.SecretReference);
+        p.Add("@AuthenticationType", credentialReference.AuthenticationType);
+        p.Add("@IsConfigured", credentialReference.IsConfigured);
+        p.Add("@UpdatedBy", updatedBy);
+        p.Add("@ExpectedRowVersion", expectedRowVersion);
+
+        try
+        {
+            return await conn.QuerySingleAsync<VendorCredentialReference>(
+                "sp_VendorCredentialReference_Save", p, commandType: CommandType.StoredProcedure);
+        }
+        catch (System.Exception ex) when (ex.Message.Contains("Concurrency conflict"))
+        {
+            throw new ConcurrencyConflictException("Concurrency conflict: Configuration was modified by another operator.");
+        }
+        catch (System.Exception ex) when (ex.Message.Contains("Vendor not found"))
+        {
+            throw new EntityNotFoundException($"Vendor '{credentialReference.VendorId}' not found.");
+        }
+        catch (System.Exception ex) when (ex.Message.Contains("Conflicting credential references"))
+        {
+            throw new DomainValidationException("Conflicting credential references exist for this vendor and environment.");
+        }
     }
 }

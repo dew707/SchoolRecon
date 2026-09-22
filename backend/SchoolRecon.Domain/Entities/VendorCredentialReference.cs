@@ -13,4 +13,5 @@ public class VendorCredentialReference
     public bool IsConfigured { get; set; } = true;
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
     public DateTimeOffset UpdatedAt { get; set; } = DateTimeOffset.UtcNow;
+    public int RowVersion { get; set; } = 1;
 }
