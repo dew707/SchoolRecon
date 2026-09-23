@@ -34,7 +34,8 @@ import {
   VendorArtifact,
   VendorReportReadyEvent,
   VendorCredentialReference,
-  VendorConnectorConfig
+  VendorConnectorConfig,
+  VendorNavigationStep
 } from '../types';
 
 import { realtimeHub } from './realtimeHub';
@@ -90,6 +91,8 @@ export interface ReconServiceContract {
   saveVendorConnector(vendorId: string, connector: VendorConnectorConfig): Promise<VendorConnectorConfig>;
   getCredentialReference(vendorId: string, environment: string): Promise<VendorCredentialReference | undefined>;
   saveCredentialReference(vendorId: string, credential: VendorCredentialReference): Promise<VendorCredentialReference>;
+  getNavigationSteps(vendorId: string): Promise<VendorNavigationStep[]>;
+  saveNavigationSteps(vendorId: string, steps: VendorNavigationStep[]): Promise<VendorNavigationStep[]>;
   getSchools(): Promise<School[]>;
   getArtifacts(): Promise<Artifact[]>;
   getAgentInvestigations(): Promise<AgentInvestigation[]>;
@@ -249,6 +252,18 @@ class ReconServiceImpl implements ReconServiceContract {
   async saveCredentialReference(vendorId: string, credential: VendorCredentialReference): Promise<VendorCredentialReference> {
     const res = await fetch(`${this.apiBase}/vendors/${encodeURIComponent(vendorId)}/credential-reference`, {
       method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(credential)
+    });
+    return this.requireSuccess(res);
+  }
+
+  async getNavigationSteps(vendorId: string): Promise<VendorNavigationStep[]> {
+    const res = await fetch(`${this.apiBase}/vendors/${encodeURIComponent(vendorId)}/navigation-steps`);
+    return this.requireSuccess(res);
+  }
+
+  async saveNavigationSteps(vendorId: string, steps: VendorNavigationStep[]): Promise<VendorNavigationStep[]> {
+    const res = await fetch(`${this.apiBase}/vendors/${encodeURIComponent(vendorId)}/navigation-steps`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(steps)
     });
     return this.requireSuccess(res);
   }

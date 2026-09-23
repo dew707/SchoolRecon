@@ -33,8 +33,7 @@ public class NavigationStepRepository : INavigationStepRepository
 
         try
         {
-            // Clean slate for atomic sequence reload
-            await conn.ExecuteAsync("DELETE FROM VendorNavigationStep WHERE VendorConnectorId = @ConnectorId", new { ConnectorId = connectorId }, tx);
+            await conn.ExecuteAsync("sp_VendorNavigationStep_DeleteByConnector", new { VendorConnectorId = connectorId }, tx, commandType: CommandType.StoredProcedure);
 
             foreach (var step in steps)
             {

@@ -26,7 +26,13 @@ import {
   Clock,
   Download,
   Camera,
-  Bot
+  Bot,
+  Plus,
+  Copy,
+  Trash2,
+  ArrowUp,
+  ArrowDown,
+  Pencil
 } from 'lucide-react';
 import { PageHeader } from '../components/shared/PageHeader';
 import { StatusBadge } from '../components/shared/StatusBadge';
@@ -84,13 +90,17 @@ export const VendorConfigPage: React.FC<VendorConfigPageProps> = ({
   });
 
   // Load latest configuration from SQL Server via API on mount
+  const [savedSteps, setSavedSteps] = useState<VendorNavigationStep[]>(vendor.navigationSteps || []);
+  const [editingStep, setEditingStep] = useState<VendorNavigationStep | null>(null);
+
   useEffect(() => {
     setIsLoading(true);
-    reconService.getVendor(vendorId)
-      .then(v => {
+    Promise.all([reconService.getVendor(vendorId), reconService.getNavigationSteps(vendorId)])
+      .then(([v, navigationSteps]) => {
         if (!v) throw new Error(`Vendor '${vendorId}' was not found.`);
         setVendor(v);
-        setSteps(v.navigationSteps || []);
+        setSteps(navigationSteps);
+        setSavedSteps(navigationSteps);
         if (v.rowVersion) setRowVersion(v.rowVersion);
       })
       .catch(err => {
@@ -154,6 +164,17 @@ export const VendorConfigPage: React.FC<VendorConfigPageProps> = ({
         return;
       }
 
+      if (activeTab === 'Navigation') {
+        const normalized = steps.map((step, index) => ({ ...step, sequence: index + 1 }));
+        const saved = await reconService.saveNavigationSteps(vendorId, normalized);
+        setSteps(saved);
+        setSavedSteps(saved);
+        setSaveState('saved');
+        setStatusMessage('Navigation workflow was saved atomically and reloaded from SQL Server.');
+        setTimeout(() => setSaveState('idle'), 4000);
+        return;
+      }
+
       const payload: Vendor = {
         ...vendor,
         rowVersion: rowVersion,
@@ -187,6 +208,38 @@ export const VendorConfigPage: React.FC<VendorConfigPageProps> = ({
 
   // Steps state
   const [steps, setSteps] = useState<VendorNavigationStep[]>(vendor.navigationSteps || []);
+
+  const resequence = (items: VendorNavigationStep[]) => items.map((step, index) => ({ ...step, sequence: index + 1 }));
+  const moveStep = (index: number, offset: number) => {
+    const target = index + offset;
+    if (target < 0 || target >= steps.length) return;
+    const next = [...steps];
+    [next[index], next[target]] = [next[target], next[index]];
+    setSteps(resequence(next));
+  };
+  const duplicateStep = (index: number) => {
+    const source = steps[index];
+    const copy = { ...source, id: '', stepCode: `${source.stepCode || 'STEP'}_COPY` };
+    const next = [...steps];
+    next.splice(index + 1, 0, copy);
+    setSteps(resequence(next));
+    setEditingStep({ ...copy, sequence: index + 2 });
+  };
+  const newStep = (): VendorNavigationStep => ({
+    id: '', sequence: steps.length + 1, stepCode: '', action: 'CLICK', selectorStrategy: 'data-testid',
+    selector: '', description: '', timeoutMs: 15000, retryCount: 1, isRequired: true, isActive: true
+  });
+  const commitEditedStep = () => {
+    if (!editingStep) return;
+    const next = [...steps];
+    const existing = editingStep.id ? next.findIndex(s => s.id === editingStep.id) : -1;
+    const sequenceIndex = Math.max(0, editingStep.sequence - 1);
+    if (existing >= 0) next[existing] = editingStep;
+    else if (sequenceIndex < next.length && next[sequenceIndex].id === '') next[sequenceIndex] = editingStep;
+    else next.splice(sequenceIndex, 0, editingStep);
+    setSteps(resequence(next));
+    setEditingStep(null);
+  };
 
   const schoolOptions = [
     { code: 'UTTARA_MDL', name: 'Uttara Model High School' },
@@ -367,7 +420,7 @@ export const VendorConfigPage: React.FC<VendorConfigPageProps> = ({
           { id: 'Testing', label: '⚡ Connector Test & Live Agent' },
           { id: 'General', label: '1. General' },
           { id: 'Authentication', label: '2. Authentication' },
-          { id: 'Navigation', label: '3. Navigation Workflow (13 Steps)' },
+          { id: 'Navigation', label: `3. Navigation Workflow (${steps.length} Steps)` },
           { id: 'Report', label: '4. Report Schema & Parameters' }
         ].map(t => (
           <button
@@ -391,9 +444,9 @@ export const VendorConfigPage: React.FC<VendorConfigPageProps> = ({
           <div className="bg-white rounded-xl border border-slate-200/90 p-5 shadow-sm space-y-4">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-100 pb-3">
               <div>
-                <h3 className="text-sm font-bold text-[#14213D]">Connector Execution Panel</h3>
+                <h3 className="text-sm font-bold text-[#14213D]">Connector Execution Panel — BACKEND-DEPENDENT / NOT IMPLEMENTED</h3>
                 <p className="text-xs text-slate-500">
-                  Run targeted stage tests or launch the full automated collection agent across the Demo Portal.
+                  Execution controls are disabled. T04 configures workflow only and does not claim browser execution.
                 </p>
               </div>
 
@@ -455,34 +508,34 @@ export const VendorConfigPage: React.FC<VendorConfigPageProps> = ({
             <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-slate-100">
               <div className="flex flex-wrap items-center gap-2">
                 <button
-                  onClick={() => handleRunFullTest('portal')}
-                  className="px-3 py-1.5 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg border border-slate-300"
+                  disabled title="Backend-dependent; not implemented"
+                  className="px-3 py-1.5 text-xs font-semibold text-slate-400 bg-slate-100 rounded-lg border border-slate-300 cursor-not-allowed"
                 >
                   TEST PORTAL
                 </button>
                 <button
-                  onClick={() => handleRunFullTest('login')}
-                  className="px-3 py-1.5 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg border border-slate-300"
+                  disabled title="Backend-dependent; not implemented"
+                  className="px-3 py-1.5 text-xs font-semibold text-slate-400 bg-slate-100 rounded-lg border border-slate-300 cursor-not-allowed"
                 >
                   TEST LOGIN
                 </button>
                 <button
-                  onClick={() => handleRunFullTest('navigation')}
-                  className="px-3 py-1.5 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg border border-slate-300"
+                  disabled title="Backend-dependent; not implemented"
+                  className="px-3 py-1.5 text-xs font-semibold text-slate-400 bg-slate-100 rounded-lg border border-slate-300 cursor-not-allowed"
                 >
                   TEST NAVIGATION
                 </button>
                 <button
-                  onClick={() => handleRunFullTest('download')}
-                  className="px-3 py-1.5 text-xs font-semibold text-blue-700 bg-blue-50 hover:bg-blue-100 rounded-lg border border-blue-200"
+                  disabled title="Backend-dependent; not implemented"
+                  className="px-3 py-1.5 text-xs font-semibold text-slate-400 bg-slate-100 rounded-lg border border-slate-300 cursor-not-allowed"
                 >
                   TEST DOWNLOAD
                 </button>
               </div>
 
               <button
-                onClick={() => handleRunFullTest('full')}
-                className="px-5 py-2 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-xl transition-all shadow-md shadow-blue-600/20 flex items-center gap-2"
+                disabled title="Backend-dependent; not implemented"
+                className="px-5 py-2 text-xs font-bold text-slate-400 bg-slate-100 border rounded-xl cursor-not-allowed flex items-center gap-2"
               >
                 <Play className="w-3.5 h-3.5 fill-white" />
                 <span>RUN FULL TEST (XLSX INGESTION)</span>
@@ -912,17 +965,18 @@ export const VendorConfigPage: React.FC<VendorConfigPageProps> = ({
         </div>
       )}
 
-      {/* TAB 4: NAVIGATION WORKFLOW (13 STEPS CONFIGURATION) */}
+      {/* TAB 4: NAVIGATION WORKFLOW */}
       {activeTab === 'Navigation' && (
         <div className="bg-white rounded-xl border border-slate-200 p-6 space-y-4 text-xs">
           <div className="flex justify-between items-center border-b pb-3">
             <div>
-              <h3 className="font-bold text-sm text-[#14213D]">Browser Automation Navigation Steps (13 Configured)</h3>
-              <p className="text-slate-500">Configured deterministic actions executed by the Playwright worker.</p>
+              <h3 className="font-bold text-sm text-[#14213D]">What will the collection agent do?</h3>
+              <p className="text-slate-500">Define the ordered workflow. Execution and test controls are not implemented in T04.</p>
             </div>
-            <span className="text-xs font-mono text-blue-700 font-bold bg-blue-50 px-2.5 py-1 rounded-lg border border-blue-200">
-              Strategy: data-testid &gt; id &gt; css
-            </span>
+            <div className="flex gap-2">
+              <button onClick={() => setSteps(savedSteps.map(s => ({ ...s })))} className="px-3 py-2 border rounded-lg font-bold text-slate-600">Discard changes</button>
+              <button onClick={() => setEditingStep(newStep())} className="px-3 py-2 rounded-lg bg-blue-600 text-white font-bold flex items-center gap-1"><Plus size={14}/> Add step</button>
+            </div>
           </div>
 
           <div className="overflow-x-auto">
@@ -931,32 +985,64 @@ export const VendorConfigPage: React.FC<VendorConfigPageProps> = ({
                 <tr>
                   <th className="p-2.5 px-3">#</th>
                   <th className="p-2.5">Action</th>
-                  <th className="p-2.5">Strategy</th>
-                  <th className="p-2.5">Selector / Value</th>
+                  <th className="p-2.5">Instruction</th>
                   <th className="p-2.5">Description</th>
                   <th className="p-2.5 text-center">Timeout</th>
-                  <th className="p-2.5 text-center">Required</th>
+                  <th className="p-2.5 text-center">State</th>
+                  <th className="p-2.5 text-right">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 font-mono text-[11px]">
-                {steps.map(s => (
-                  <tr key={s.id} className="hover:bg-slate-50">
+                {steps.map((s, index) => (
+                  <tr key={`${s.id || 'new'}-${s.sequence}`} className="hover:bg-slate-50">
                     <td className="p-2.5 px-3 font-bold text-slate-700">{s.sequence}</td>
                     <td className="p-2.5">
                       <span className="px-2 py-0.5 bg-blue-50 text-blue-700 font-bold rounded">
                         {s.action}
                       </span>
                     </td>
-                    <td className="p-2.5 text-slate-600">{s.selectorStrategy}</td>
-                    <td className="p-2.5 font-bold text-slate-800 truncate max-w-[200px]">{s.selector} {s.value ? `(${s.value})` : ''}</td>
+                    <td className="p-2.5 font-bold text-slate-800 max-w-[280px]">
+                      <div>{s.selector}</div>
+                      {s.inputSource && <div className="text-[10px] text-blue-600">{s.inputSource === 'STATIC' ? s.staticValue : s.inputSource}</div>}
+                    </td>
                     <td className="p-2.5 font-sans text-slate-600">{s.description}</td>
                     <td className="p-2.5 text-center text-slate-500">{s.timeoutMs / 1000}s</td>
-                    <td className="p-2.5 text-center font-bold text-emerald-600">{s.isRequired ? 'YES' : 'OPT'}</td>
+                    <td className="p-2.5 text-center">
+                      <button onClick={() => setSteps(steps.map((x, i) => i === index ? { ...x, isActive: x.isActive === false } : x))} className={`font-bold ${s.isActive === false ? 'text-slate-400' : 'text-emerald-600'}`}>{s.isActive === false ? 'DISABLED' : 'ENABLED'}</button>
+                      <div className="text-[10px] text-slate-400">{s.isRequired ? 'Required' : 'Optional'}</div>
+                    </td>
+                    <td className="p-2.5"><div className="flex justify-end gap-1">
+                      <button title="Move up" disabled={index === 0} onClick={() => moveStep(index, -1)} className="p-1 disabled:opacity-30"><ArrowUp size={14}/></button>
+                      <button title="Move down" disabled={index === steps.length - 1} onClick={() => moveStep(index, 1)} className="p-1 disabled:opacity-30"><ArrowDown size={14}/></button>
+                      <button title="Edit" onClick={() => setEditingStep({ ...s })} className="p-1"><Pencil size={14}/></button>
+                      <button title="Duplicate" onClick={() => duplicateStep(index)} className="p-1"><Copy size={14}/></button>
+                      <button title="Delete" onClick={() => setSteps(resequence(steps.filter((_, i) => i !== index)))} className="p-1 text-rose-600"><Trash2 size={14}/></button>
+                    </div></td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
+
+          {editingStep && (
+            <div className="fixed inset-0 z-50 bg-slate-950/40 flex justify-end" onMouseDown={() => setEditingStep(null)}>
+              <div className="w-full max-w-xl h-full overflow-y-auto bg-white p-6 shadow-2xl space-y-4" onMouseDown={e => e.stopPropagation()}>
+                <div className="flex justify-between items-center"><div><h3 className="font-bold text-base">Navigation step</h3><p className="text-slate-500">Configure one deterministic business action.</p></div><button onClick={() => setEditingStep(null)}><X size={18}/></button></div>
+                <label className="block"><span className="font-bold">Step code</span><input value={editingStep.stepCode || ''} onChange={e => setEditingStep({...editingStep, stepCode:e.target.value})} className="mt-1 w-full border rounded-lg p-2" placeholder="LOGIN_USERNAME"/></label>
+                <label className="block"><span className="font-bold">Description</span><input value={editingStep.description} onChange={e => setEditingStep({...editingStep, description:e.target.value})} className="mt-1 w-full border rounded-lg p-2" placeholder="Enter the configured username"/></label>
+                <label className="block"><span className="font-bold">Action</span><select value={editingStep.action} onChange={e => setEditingStep({...editingStep, action:e.target.value as StepAction, inputSource: undefined, staticValue: undefined})} className="mt-1 w-full border rounded-lg p-2">{(['NAVIGATE','FILL','CLICK','WAIT_FOR','SELECT','SET_DATE','SEARCH','DOWNLOAD'] as StepAction[]).map(x=><option key={x}>{x}</option>)}</select></label>
+                {editingStep.action !== 'NAVIGATE' && <label className="block"><span className="font-bold">How to find the page element</span><select value={editingStep.selectorStrategy} onChange={e => setEditingStep({...editingStep, selectorStrategy:e.target.value as SelectorStrategy})} className="mt-1 w-full border rounded-lg p-2">{['data-testid','id','name','css','text','role'].map(x=><option key={x}>{x}</option>)}</select></label>}
+                <label className="block"><span className="font-bold">{editingStep.action === 'NAVIGATE' ? 'Destination or path' : 'Element selector'}</span><input value={editingStep.selector} onChange={e => setEditingStep({...editingStep, selector:e.target.value})} className="mt-1 w-full border rounded-lg p-2"/></label>
+                {(['FILL','SELECT','SET_DATE'] as StepAction[]).includes(editingStep.action) && <>
+                  <label className="block"><span className="font-bold">Value source</span><select value={editingStep.inputSource || ''} onChange={e => setEditingStep({...editingStep, inputSource:e.target.value as VendorNavigationStep['inputSource'], staticValue:e.target.value === 'STATIC' ? editingStep.staticValue : undefined})} className="mt-1 w-full border rounded-lg p-2"><option value="">Choose a source</option><option value="STATIC">Static value</option><option value="{{schoolCode}}">Runtime: school code</option><option value="{{vendorSchoolCode}}">Runtime: vendor school code</option><option value="{{businessDate}}">Runtime: business date</option><option value="{{fromDate}}">Runtime: from date</option><option value="{{toDate}}">Runtime: to date</option>{editingStep.action === 'FILL' && <><option value="CREDENTIAL_USERNAME">Credential field: username</option><option value="CREDENTIAL_PASSWORD">Credential field: password</option></>}</select></label>
+                  {editingStep.inputSource === 'STATIC' && <label className="block"><span className="font-bold">Static value</span><input value={editingStep.staticValue || ''} onChange={e => setEditingStep({...editingStep, staticValue:e.target.value})} className="mt-1 w-full border rounded-lg p-2"/><span className="text-[10px] text-rose-600">Never enter usernames, passwords, tokens, PINs, OTPs, or API keys.</span></label>}
+                </>}
+                <div className="grid grid-cols-2 gap-3"><label><span className="font-bold">Timeout (ms)</span><input type="number" min="1000" max="300000" value={editingStep.timeoutMs} onChange={e => setEditingStep({...editingStep, timeoutMs:Number(e.target.value)})} className="mt-1 w-full border rounded-lg p-2"/></label><label><span className="font-bold">Retries</span><input type="number" min="0" max="10" value={editingStep.retryCount} onChange={e => setEditingStep({...editingStep, retryCount:Number(e.target.value)})} className="mt-1 w-full border rounded-lg p-2"/></label></div>
+                <div className="flex gap-6"><label><input type="checkbox" checked={editingStep.isRequired} onChange={e => setEditingStep({...editingStep,isRequired:e.target.checked})}/> Required step</label><label><input type="checkbox" checked={editingStep.isActive !== false} onChange={e => setEditingStep({...editingStep,isActive:e.target.checked})}/> Enabled</label></div>
+                <div className="flex justify-end gap-2 pt-3 border-t"><button onClick={() => setEditingStep(null)} className="px-4 py-2 border rounded-lg font-bold">Cancel</button><button onClick={commitEditedStep} className="px-4 py-2 bg-blue-600 text-white rounded-lg font-bold">Apply step</button></div>
+              </div>
+            </div>
+          )}
         </div>
       )}
 

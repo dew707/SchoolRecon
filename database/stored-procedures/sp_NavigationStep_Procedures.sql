@@ -88,3 +88,12 @@ BEGIN
     DELETE FROM VendorNavigationStep WHERE VendorNavigationStepId = @VendorNavigationStepId;
 END;
 GO
+
+CREATE OR ALTER PROCEDURE sp_VendorNavigationStep_DeleteByConnector
+    @VendorConnectorId VARCHAR(64)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    DELETE FROM VendorNavigationStep WHERE VendorConnectorId = @VendorConnectorId;
+END;
+GO

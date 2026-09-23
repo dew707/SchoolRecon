@@ -8,7 +8,8 @@ public class NavigationStepDto
     public string Action { get; set; } = string.Empty;
     public string SelectorStrategy { get; set; } = string.Empty;
     public string Selector { get; set; } = string.Empty;
-    public string? Value { get; set; }
+    public string? InputSource { get; set; }
+    public string? StaticValue { get; set; }
     public string Description { get; set; } = string.Empty;
     public int TimeoutMs { get; set; } = 15000;
     public int RetryCount { get; set; } = 1;

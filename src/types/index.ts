@@ -71,19 +71,22 @@ export type JobStatus =
 
 export type SelectorStrategy = 'data-testid' | 'id' | 'name' | 'css' | 'text' | 'role';
 
-export type StepAction = 'NAVIGATE' | 'FILL' | 'CLICK' | 'WAIT_FOR' | 'SELECT' | 'SET_DATE' | 'DOWNLOAD';
+export type StepAction = 'NAVIGATE' | 'FILL' | 'CLICK' | 'WAIT_FOR' | 'SELECT' | 'SET_DATE' | 'SEARCH' | 'DOWNLOAD';
 
 export interface VendorNavigationStep {
   id: string;
   sequence: number;
+  stepCode?: string;
   action: StepAction;
   selectorStrategy: SelectorStrategy;
   selector: string;
-  value?: string;
+  inputSource?: 'STATIC' | '{{schoolCode}}' | '{{vendorSchoolCode}}' | '{{businessDate}}' | '{{fromDate}}' | '{{toDate}}' | 'CREDENTIAL_USERNAME' | 'CREDENTIAL_PASSWORD';
+  staticValue?: string;
   description: string;
   timeoutMs: number;
   retryCount: number;
   isRequired: boolean;
+  isActive?: boolean;
 }
 
 export interface VendorCredentialReference {
